@@ -3,8 +3,6 @@ name: Claude PR Agent
 on:
   issue_comment:
     types: [created]
-  pull_request_review_comment:
-    types: [created]
   issues:
     types: [opened, assigned]
 
@@ -12,7 +10,6 @@ jobs:
   claude-pr:
     if: |
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'issues' && contains(github.event.issue.body, '@claude'))
     runs-on: ubuntu-latest
     permissions:
@@ -25,7 +22,7 @@ jobs:
           fetch-depth: 1
 
       - name: Run Claude PR Agent
-        uses: anthropics/claude-pr-action@main
+        uses: ./ # Use the local action
         with:
           timeout_minutes: "60"
           github_token: ${{ secrets.GITHUB_TOKEN }}

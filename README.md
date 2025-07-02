@@ -15,7 +15,7 @@ For simply tagging @claude in issues and PRs out of the box, [check out the Clau
 Add the following to your workflow file:
 
 ```yaml
-# Using a direct prompt
+# Using a direct prompt with OAuth
 - name: Run Claude Code with direct prompt
   uses: shimayuz/claude-code-base-action@main
   with:
@@ -26,28 +26,32 @@ Add the following to your workflow file:
     claude_refresh_token: ${{ secrets.CLAUDE_REFRESH_TOKEN }}
     claude_expires_at: ${{ secrets.CLAUDE_EXPIRES_AT }}
 
-# Or using a prompt from a file
+# Using a prompt from a file with API Key
 - name: Run Claude Code with prompt file
   uses: shimayuz/claude-code-base-action@main
   with:
     prompt_file: "/path/to/prompt.txt"
     allowed_tools: "Bash(git:*),View,GlobTool,GrepTool,BatchTool"
-    use_oauth: "true"
-    claude_access_token: ${{ secrets.CLAUDE_ACCESS_TOKEN }}
-    claude_refresh_token: ${{ secrets.CLAUDE_REFRESH_TOKEN }}
-    claude_expires_at: ${{ secrets.CLAUDE_EXPIRES_AT }}
+    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
-# Or limiting the conversation turns
-- name: Run Claude Code with limited turns
+# Using custom system prompts
+- name: Run Claude Code with custom system prompt
   uses: shimayuz/claude-code-base-action@main
   with:
-    prompt: "Your prompt here"
+    prompt: "Build a REST API"
+    system_prompt: "You are a senior backend engineer. Focus on security, performance, and maintainability."
     allowed_tools: "Bash(git:*),View,GlobTool,GrepTool,BatchTool"
-    max_turns: "5" # Limit conversation to 5 turns
-    use_oauth: "true"
-    claude_access_token: ${{ secrets.CLAUDE_ACCESS_TOKEN }}
-    claude_refresh_token: ${{ secrets.CLAUDE_REFRESH_TOKEN }}
-    claude_expires_at: ${{ secrets.CLAUDE_EXPIRES_AT }}
+    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+# Using fallback model for handling API errors
+- name: Run Claude Code with fallback model
+  uses: shimayuz/claude-code-base-action@main
+  with:
+    prompt: "Review and fix TypeScript errors"
+    model: "claude-opus-4-20250514"
+    fallback_model: "claude-sonnet-4-20250514"
+    allowed_tools: "Bash(git:*),View,GlobTool,GrepTool,BatchTool"
+    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
 ## Inputs
@@ -60,8 +64,12 @@ Add the following to your workflow file:
 | `disallowed_tools`     | Comma-separated list of disallowed tools that Claude Code cannot use                              | No       | ''                           |
 | `max_turns`            | Maximum number of conversation turns (default: no limit)                                          | No       | ''                           |
 | `mcp_config`           | Path to the MCP configuration JSON file                                                           | No       | ''                           |
-| `model`                | Model to use (provider-specific format required for Bedrock/Vertex)                               | No       | 'claude-3-7-sonnet-20250219' |
-| `anthropic_model`      | DEPRECATED: Use 'model' instead                                                                   | No       | 'claude-3-7-sonnet-20250219' |
+| `system_prompt`        | Override system prompt                                                                            | No       | ''                           |
+| `append_system_prompt` | Append to system prompt                                                                           | No       | ''                           |
+| `claude_env`           | Custom environment variables to pass to Claude Code execution (YAML multiline format)             | No       | ''                           |
+| `model`                | Model to use (provider-specific format required for Bedrock/Vertex)                               | No       | 'claude-4-0-sonnet-20250219' |
+| `anthropic_model`      | DEPRECATED: Use 'model' instead                                                                   | No       | 'claude-4-0-sonnet-20250219' |
+| `fallback_model`       | Enable automatic fallback to specified model when default model is overloaded                     | No       | ''                           |
 | `timeout_minutes`      | Timeout in minutes for Claude Code execution                                                      | No       | '10'                         |
 | `anthropic_api_key`    | Anthropic API key (required for direct Anthropic API)                                             | No       | ''                           |
 | `use_bedrock`          | Use Amazon Bedrock with OIDC authentication instead of direct Anthropic API                       | No       | 'false'                      |
@@ -81,119 +89,6 @@ Add the following to your workflow file:
 | `conclusion`     | Execution status of Claude Code ('success' or 'failure')   |
 | `execution_file` | Path to the JSON file containing Claude Code execution log |
 
-## Using MCP Config
-
-You can provide a custom MCP configuration file to dynamically load MCP servers:
-
-```yaml
-- name: Run Claude Code with MCP config
-  uses: shimayuz/claude-code-base-action@main
-  with:
-    prompt: "Your prompt here"
-    mcp_config: "path/to/mcp-config.json"
-    allowed_tools: "Bash(git:*),View,GlobTool,GrepTool,BatchTool"
-    use_oauth: "true"
-    claude_access_token: ${{ secrets.CLAUDE_ACCESS_TOKEN }}
-    claude_refresh_token: ${{ secrets.CLAUDE_REFRESH_TOKEN }}
-    claude_expires_at: ${{ secrets.CLAUDE_EXPIRES_AT }}
-```
-
-The MCP config file should follow this format:
-
-```json
-{
-  "mcpServers": {
-    "server-name": {
-      "command": "node",
-      "args": ["./server.js"],
-      "env": {
-        "API_KEY": "your-api-key"
-      }
-    }
-  }
-}
-```
-
-You can combine MCP config with other inputs like allowed tools:
-
-```yaml
-# Using multiple inputs together
-- name: Run Claude Code with MCP and custom tools
-  uses: shimayuz/claude-code-base-action@main
-  with:
-    prompt: "Access the custom MCP server and use its tools"
-    mcp_config: "mcp-config.json"
-    allowed_tools: "Bash(git:*),View,mcp__server-name__custom_tool"
-    timeout_minutes: "15"
-    use_oauth: "true"
-    claude_access_token: ${{ secrets.CLAUDE_ACCESS_TOKEN }}
-    claude_refresh_token: ${{ secrets.CLAUDE_REFRESH_TOKEN }}
-    claude_expires_at: ${{ secrets.CLAUDE_EXPIRES_AT }}
-```
-
-## Example: PR Code Review
-
-```yaml
-name: Claude Code Review
-
-on:
-  pull_request:
-    types: [opened, synchronize]
-
-jobs:
-  code-review:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Run Code Review with Claude
-        id: code-review
-        uses: shimayuz/claude-code-base-action@main
-        with:
-          prompt: "Review the PR changes. Focus on code quality, potential bugs, and performance issues. Suggest improvements where appropriate. Write your review as markdown text."
-          allowed_tools: "Bash(git diff --name-only HEAD~1),Bash(git diff HEAD~1),View,GlobTool,GrepTool,Write"
-          use_oauth: "true"
-          claude_access_token: ${{ secrets.CLAUDE_ACCESS_TOKEN }}
-          claude_refresh_token: ${{ secrets.CLAUDE_REFRESH_TOKEN }}
-          claude_expires_at: ${{ secrets.CLAUDE_EXPIRES_AT }}
-
-      - name: Extract and Comment PR Review
-        if: steps.code-review.outputs.conclusion == 'success'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const executionFile = '${{ steps.code-review.outputs.execution_file }}';
-            const executionLog = JSON.parse(fs.readFileSync(executionFile, 'utf8'));
-
-            // Extract the review content from the execution log
-            // The execution log contains the full conversation including Claude's responses
-            let review = '';
-
-            // Find the last assistant message which should contain the review
-            for (let i = executionLog.length - 1; i >= 0; i--) {
-              if (executionLog[i].role === 'assistant') {
-                review = executionLog[i].content;
-                break;
-              }
-            }
-
-            if (review) {
-              github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body: "## Claude Code Review\n\n" + review + "\n\n*Generated by Claude Code*"
-              });
-            }
-```
-
-Check out additional examples in [`./examples`](./examples).
-
 ## Using Cloud Providers
 
 You can authenticate with Claude using any of these four methods:
@@ -202,107 +97,6 @@ You can authenticate with Claude using any of these four methods:
 2. Claude AI OAuth authentication - requires OAuth tokens
 3. Amazon Bedrock - requires OIDC authentication and automatically uses cross-region inference profiles
 4. Google Vertex AI - requires OIDC authentication
-
-**Note**:
-
-- Bedrock and Vertex use OIDC authentication exclusively
-- AWS Bedrock automatically uses cross-region inference profiles for certain models
-- For cross-region inference profile models, you need to request and be granted access to the Claude models in all regions that the inference profile uses
-- The Bedrock API endpoint URL is automatically constructed using the AWS_REGION environment variable (e.g., `https://bedrock-runtime.us-west-2.amazonaws.com`)
-- You can override the Bedrock API endpoint URL by setting the `ANTHROPIC_BEDROCK_BASE_URL` environment variable
-
-### Model Configuration
-
-Use provider-specific model names based on your chosen provider:
-
-```yaml
-# For direct Anthropic API (default)
-- name: Run Claude Code with Anthropic API
-  uses: shimayuz/claude-code-base-action@main
-  with:
-    prompt: "Your prompt here"
-    model: "claude-3-7-sonnet-20250219"
-    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-
-# For Claude AI OAuth authentication
-- name: Run Claude Code with OAuth
-  uses: shimayuz/claude-code-base-action@main
-  with:
-    prompt: "Your prompt here"
-    model: "claude-3-7-sonnet-20250219"
-    use_oauth: "true"
-    claude_access_token: ${{ secrets.CLAUDE_ACCESS_TOKEN }}
-    claude_refresh_token: ${{ secrets.CLAUDE_REFRESH_TOKEN }}
-    claude_expires_at: ${{ secrets.CLAUDE_EXPIRES_AT }}
-
-# For Amazon Bedrock (requires OIDC authentication)
-- name: Configure AWS Credentials (OIDC)
-  uses: aws-actions/configure-aws-credentials@v4
-  with:
-    role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-    aws-region: us-west-2
-
-- name: Run Claude Code with Bedrock
-  uses: shimayuz/claude-code-base-action@main
-  with:
-    prompt: "Your prompt here"
-    model: "anthropic.claude-3-7-sonnet-20250219-v1:0"
-    use_bedrock: "true"
-
-# For Google Vertex AI (requires OIDC authentication)
-- name: Authenticate to Google Cloud
-  uses: google-github-actions/auth@v2
-  with:
-    workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-    service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-- name: Run Claude Code with Vertex AI
-  uses: shimayuz/claude-code-base-action@main
-  with:
-    prompt: "Your prompt here"
-    model: "claude-3-7-sonnet@20250219"
-    use_vertex: "true"
-```
-
-## Example: Using OIDC Authentication for AWS Bedrock
-
-This example shows how to use OIDC authentication with AWS Bedrock:
-
-```yaml
-- name: Configure AWS Credentials (OIDC)
-  uses: aws-actions/configure-aws-credentials@v4
-  with:
-    role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-    aws-region: us-west-2
-
-- name: Run Claude Code with AWS OIDC
-  uses: shimayuz/claude-code-base-action@main
-  with:
-    prompt: "Your prompt here"
-    use_bedrock: "true"
-    model: "anthropic.claude-3-7-sonnet-20250219-v1:0"
-    allowed_tools: "Bash(git:*),View,GlobTool,GrepTool,BatchTool"
-```
-
-## Example: Using OIDC Authentication for GCP Vertex AI
-
-This example shows how to use OIDC authentication with GCP Vertex AI:
-
-```yaml
-- name: Authenticate to Google Cloud
-  uses: google-github-actions/auth@v2
-  with:
-    workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-    service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-- name: Run Claude Code with GCP OIDC
-  uses: shimayuz/claude-code-base-action@main
-  with:
-    prompt: "Your prompt here"
-    use_vertex: "true"
-    model: "claude-3-7-sonnet@20250219"
-    allowed_tools: "Bash(git:*),View,GlobTool,GrepTool,BatchTool"
-```
 
 ## Security Best Practices
 
@@ -349,23 +143,6 @@ To use API key authentication:
    ```yaml
    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
    ```
-
-**Never do this:**
-
-```yaml
-# ❌ WRONG - Exposes your API key
-anthropic_api_key: "sk-ant-..."
-```
-
-**Always do this:**
-
-```yaml
-# ✅ CORRECT - Uses GitHub secrets
-anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-```
-
-This applies to all sensitive values including API keys, access tokens, and credentials.
-We also reccomend that you always use short-lived tokens when possible
 
 ## License
 
